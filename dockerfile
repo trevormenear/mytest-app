@@ -1,5 +1,5 @@
 FROM public.ecr.aws/docker/library/python:3.11-slim
-RUN pip install fastapi uvicorn
+RUN pip install fastapi uvicorn boto3
 WORKDIR /app
 COPY app.py .
 ENV PORT=8000
