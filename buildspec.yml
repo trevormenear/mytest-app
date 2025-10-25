@@ -2,19 +2,17 @@ version: 0.2
 
 env:
   variables:
-    IMAGE_REPO_NAME: "mytest-app"           # your existing ECR repo
-    IMAGE_TAG: "prod"                       # tag App Runner tracks
-  parameter-store: {}
-  secrets-manager: {}
+    IMAGE_REPO_NAME: mytest-app  # <-- your ECR repo name
 
 phases:
   pre_build:
     commands:
       - echo Logging in to Amazon ECR...
-      - aws --version
       - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
       - REGION=${AWS_DEFAULT_REGION:-us-east-1}
-      - REPO_URI="$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$IMAGE_REPO_NAME"
+      # Use the Git commit SHA CodeBuild provides; always unique
+      - IMAGE_TAG=${CODEBUILD_RESOLVED_SOURCE_VERSION}
+      - REPO_URI=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$IMAGE_REPO_NAME
       - aws ecr get-login-password --region $REGION | docker login --username AWS --password-stdin $REPO_URI
   build:
     commands:
@@ -25,8 +23,10 @@ phases:
     commands:
       - echo Pushing the Docker image...
       - docker push $REPO_URI:$IMAGE_TAG
-      - echo Build completed on `date`
+      - echo "IMAGE_URI=$REPO_URI:$IMAGE_TAG"
+      # optional: output file many deployment tools expect
+      - printf '{"imageUri":"%s"}' "$REPO_URI:$IMAGE_TAG" > imageDetail.json
+
 artifacts:
   files:
-    - '**/*'
-
+    - imageDetail.json
