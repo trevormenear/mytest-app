@@ -23,6 +23,12 @@ def create_quote(client_id: str, quote_id: str, dwelling_coverage: int, price: f
     table.put_item(Item=item)
     return {"ok": True, "stored": item}
 
+@app.get("/health")
+async def health(): return {"ok": True}
+
+@app.get("/api/health")
+async def api_health(): return await health()
+
 @app.get("/quotes/{client_id}")
 def list_quotes(client_id: str):
     table = boto3.resource("dynamodb", region_name=os.environ.get("AWS_REGION", "us-east-1")) \
