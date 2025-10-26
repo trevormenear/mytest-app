@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import os, boto3
 from boto3.dynamodb.conditions import Key
+from decimal import Decimal
 
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 TABLE_NAME = os.environ["DDB_TABLE_NAME"]
@@ -25,6 +26,18 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
 )
+
+
+def _jsonify_item(item: dict) -> dict:
+    """Convert Decimal values from DynamoDB into JSON-serializable types."""
+    out = {}
+    for k, v in item.items():
+        if isinstance(v, Decimal):
+            # if it's an integer-like decimal, keep it int; else float
+            out[k] = int(v) if v == v.to_integral_value() else float(v)
+        else:
+            out[k] = v
+    return out
 
 @app.get("/")
 def root():
@@ -53,13 +66,15 @@ def create_quote(body: CreateQuoteBody):
         "pk": f"CLIENT#{body.client_id}",
         "sk": f"QUOTE#{body.quote_id}",
         "dwelling_coverage": int(body.dwelling_coverage),
-        "price": float(body.price),
+        # IMPORTANT: store as Decimal for DynamoDB
+        "price": Decimal(str(body.price)),
         "client_name": body.name,
         "client_address": body.address,
     }
     try:
         table.put_item(Item=item)
-        return {"ok": True, "stored": item}
+        # Convert Decimals back to JSON-safe types for the response
+        return {"ok": True, "stored": _jsonify_item(item)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -67,6 +82,7 @@ def create_quote(body: CreateQuoteBody):
 def list_quotes(client_id: str):
     try:
         resp = table.query(KeyConditionExpression=Key("pk").eq(f"CLIENT#{client_id}"))
-        return {"ok": True, "items": resp.get("Items", [])}
+        items = [_jsonify_item(it) for it in resp.get("Items", [])]
+        return {"ok": True, "items": items}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
